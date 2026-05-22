@@ -1,0 +1,254 @@
+HTML
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>《五柳先生傳》重組挑戰</title>
+    <!-- 引入 SortableJS 以支援平板觸控拖曳 -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            touch-action: manipulation;
+        }
+        .container {
+            width: 90%;
+            max-width: 600px;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        h1 {
+            color: #2c3e50;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .screen {
+            display: none;
+        }
+        .screen.active {
+            display: block;
+        }
+        /* 登入區塊 */
+        input[type="text"] {
+            width: 80%;
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid #bdc3c7;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 100%;
+        }
+        button:active {
+            transform: translateY(2px);
+        }
+        /* 遊戲區塊 */
+        #sortable-list {
+            list-style-type: none;
+            padding: 0;
+            margin: 0 0 20px 0;
+        }
+        #sortable-list li {
+            background-color: #ecf0f1;
+            margin: 8px 0;
+            padding: 15px;
+            font-size: 18px;
+            border-radius: 8px;
+            border: 1px solid #dcdde1;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        #sortable-list li:active {
+            cursor: grabbing;
+            background-color: #dff9fb;
+        }
+        /* 結果區塊 */
+        #result-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: white;
+            display: none; /* 透過 JS 控制顯示 */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .score-display {
+            font-size: 120px;
+            font-weight: bold;
+            color: #e74c3c;
+            margin: 20px 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        .name-display {
+            font-size: 36px;
+            color: #2c3e50;
+        }
+        .message-display {
+            font-size: 24px;
+            color: #7f8c8d;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 登入畫面 -->
+    <div id="login-screen" class="container screen active">
+        <h1>《五柳先生傳》重組挑戰</h1>
+        <p>請輸入你的姓名或座號開始測驗：</p>
+        <input type="text" id="student-name" placeholder="例如：王小明 或 70135" required>
+        <button onclick="startGame()">開始測驗</button>
+        <p style="color: red; font-size: 14px; margin-top: 15px;">⚠️ 注意：每人只能測驗一次！</p>
+    </div>
+
+    <!-- 遊戲畫面 -->
+    <div id="game-screen" class="container screen">
+        <h1>請將句子拖曳至正確順序</h1>
+        <ul id="sortable-list">
+            <!-- 句子由 JS 動態生成 -->
+        </ul>
+        <button onclick="submitGame()" style="background-color: #2ecc71;">送出答案</button>
+    </div>
+
+    <!-- 結果畫面 (滿版置中) -->
+    <div id="result-screen">
+        <div class="name-display" id="final-name"></div>
+        <div class="score-display" id="final-score"></div>
+        <div class="message-display">測驗已結束，請將畫面截圖或出示給老師。</div>
+    </div>
+
+    <script>
+        // 五柳先生傳 前10句 (正確順序)
+        const correctOrder = [
+            "先生不知何許人也，",
+            "亦不詳其姓字，",
+            "宅邊有五柳樹，",
+            "因以為號焉。",
+            "閒靜少言，",
+            "不慕榮利。",
+            "好讀書，",
+            "不求甚解；",
+            "每有會意，",
+            "便欣然忘食。"
+        ];
+
+        let currentUser = "";
+
+        // 洗牌函數 (Fisher-Yates Shuffle)
+        function shuffleArray(array) {
+            let currentIndex = array.length, randomIndex;
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+
+        function startGame() {
+            const nameInput = document.getElementById('student-name').value.trim();
+            if (!nameInput) {
+                alert("請輸入姓名！");
+                return;
+            }
+            
+            currentUser = nameInput;
+
+            // 檢查是否已經玩過 (利用 localStorage)
+            const savedScore = localStorage.getItem('wuLiuScore_' + currentUser);
+            if (savedScore !== null) {
+                alert("你已經測驗過了！為您顯示最終成績。");
+                showResult(savedScore);
+                return;
+            }
+
+            // 切換畫面
+            document.getElementById('login-screen').classList.remove('active');
+            document.getElementById('game-screen').classList.add('active');
+
+            // 準備題目
+            const listElement = document.getElementById('sortable-list');
+            listElement.innerHTML = '';
+            
+            let shuffledSentences = shuffleArray([...correctOrder]);
+            
+            // 避免洗牌後跟原順序一模一樣
+            if(JSON.stringify(shuffledSentences) === JSON.stringify(correctOrder)) {
+                shuffledSentences = shuffleArray([...correctOrder]);
+            }
+
+            shuffledSentences.forEach(text => {
+                const li = document.createElement('li');
+                li.textContent = text;
+                listElement.appendChild(li);
+            });
+
+            // 啟用 Sortable 拖曳功能
+            new Sortable(listElement, {
+                animation: 150,
+                ghostClass: 'blue-background-class'
+            });
+        }
+
+        function submitGame() {
+            if (!confirm("確定要送出嗎？送出後將無法修改與重測！")) {
+                return;
+            }
+
+            const currentList = document.querySelectorAll('#sortable-list li');
+            let score = 0;
+
+            // 核對每句的絕對位置，位置正確得 10 分
+            currentList.forEach((li, index) => {
+                if (li.textContent === correctOrder[index]) {
+                    score += 10;
+                }
+            });
+
+            // 將成績存入 localStorage 防作弊重玩
+            localStorage.setItem('wuLiuScore_' + currentUser, score);
+
+            showResult(score);
+        }
+
+        function showResult(score) {
+            document.getElementById('login-screen').classList.remove('active');
+            document.getElementById('game-screen').classList.remove('active');
+            
+            const resultScreen = document.getElementById('result-screen');
+            resultScreen.style.display = 'flex'; // 顯示結果畫面
+            
+            document.getElementById('final-name').textContent = currentUser + " 的成績：";
+            document.getElementById('final-score').textContent = score + " 分";
+        }
+    </script>
+</body>
+</html>
